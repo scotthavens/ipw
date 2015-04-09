@@ -16,7 +16,7 @@ fileName = '/Users/scott/Documents/Projects/isnobal/python/test_1band.ipw'
 ipw = i.IPW(fileName)
 # print(ipw)
 
-ipw.write('out.ipw',16)
+ipw.write('out.ipw',12)
 
 
 # load both and compare

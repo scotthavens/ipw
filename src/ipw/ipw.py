@@ -17,7 +17,7 @@ import warnings
 # import h5py
 import numpy as np
 from numpy.testing import assert_array_almost_equal
-
+from math import ceil
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, ListedColormap
 
@@ -116,7 +116,7 @@ class IPW:
     """
     Represents a IPW file container
     """
-    def __init__(self, fname, rescale=True, epsg=32611):
+    def __init__(self, fname=None, epsg=32611):
         """
         IPW(fname[, rescale=True])
 
@@ -155,12 +155,25 @@ class IPW:
         self.epsg = epsg    # this should just be stored as an attribute
                             # it produces alot of book-keeping otherwise
                             
-        self.read(fname, rescale)
+        # read a file or create an empty object
+        if fname is not None:
+            self.read(fname)
+            
+        else:
+            self.fname = None
+            self.bands = []
+            self.bip = None
+            self.byteorder = None
+            self.nlines = None
+            self.nsamps = None
+            self.nbands = None
+            self.geohdr = None
 
 
-    def read(self, fname, rescale):
+    def read(self, fname):
         '''
         Read the IPW file into the various bands
+        Turns the data into a numpy array of float32
         '''
         
         # read the data to a list of lines
@@ -281,17 +294,17 @@ class IPW:
         # Separate into bands
         data = data.reshape(nlines, nsamps)
         for b in bands:
-            if rescale:
+#             if rescale:
                 b.data = np.array(b.transform(data[b.name]),
-                                  dtype=np.float32)
-            else:
-                b.data = np.array(data[b.name],
-                                  dtype=np.dtype(b.frmt))
+                                dtype=np.float32)
+#             else:
+#                 b.data = np.array(data[b.name],
+#                                   dtype=np.dtype(b.frmt))
 
         # clean things up
         self.fname = fname
-        self.rescale = rescale
-        self.name_dict = dict(zip(varlist, range(nbands)))
+#         self.rescale = rescale
+#         self.name_dict = dict(zip(varlist, range(nbands)))
         self.bands = bands
         self.bip = bip
         self.byteorder = byteorder
@@ -310,9 +323,10 @@ class IPW:
         """
 
         # set the bits, bytes, and int_max for each band
+        # have to convert nbits one to float then back at the end for ceil to work
         for i, b in enumerate(self.bands):
             self.bands[i].bits = nbits
-            self.bands[i].bytes = nbits/8
+            self.bands[i].bytes = int(ceil(float(nbits)/8))     
             self.bands[i].int_min = 0
             self.bands[i].int_max = 2**nbits - 1
             
@@ -467,18 +481,9 @@ class IPW:
         """
         Convert the data floating point data to mapped integer
         """
-        # first convert df to an integer dataframe
-#         int_df = pd.DataFrame(dtype='uint64')
+
         data_int = []
         for b in self.bands:
-            # check that bands are appropriately made, that b.Max/Min really are
-#             assert (b.data <= b.float_max).sum() == 0, \
-#                 "Bad band: max not really max.\nb.float_max = %2.10f\n \
-#                 band.data.max()  = %s" % (b.float_max, b.data.max())
-#     
-#             assert (b.data >= b.float_min).sum() == 0, \
-#                 "Bad band: min not really min.\nb.float_min = %s\n \
-#                 band.data.min()  = %2.10f" % (b.float_min, b.data.min())
     
             # no need to include b.int_min, it's always zero
             map_fn = lambda x: \
@@ -487,220 +492,242 @@ class IPW:
     
             data_int.append(map_fn(b.data))
     
-#         # use the struct package to pack ints to bytes; use '=' to prevent padding
-#         # that causes problems with the IPW scheme
-#         pack_str = "=" + "".join([PACK_DICT[b.bytes_] for b in bands])
-#     
-#         return b''.join([struct.pack(pack_str, *r[1]) for r in int_df.iterrows()])
-
+        # change to np array with correct datatype
         x = np.array(data_int)
-        x = x.astype('uint' + str(nbits))
+        nbytes = self._bits_to_bytes(nbits)
+        x = x.astype('uint' + str(8*nbytes))
 #         x = x.astype('int' + str(nbits))
 
         return x
     
+    def _bits_to_bytes(self, nbits):
+        '''
+        Convert bits to equiavalent bytes
+        '''
+        nbytes = int(ceil(float(nbits)/8))
+        
+        return nbytes
+        
 
     def __getitem__(self, key):
         return self.bands[self.name_dict[key]]
 
-    def colorize(self, dst_fname, band, colormap, ymin=None, ymax=None,
-                 drivername='Gtiff'):
-        """
-        colorize(band[, colormap][, ymin=None][, ymax=None])
 
-        Build a colorized georeferenced raster of a band
+    def new_band(self, nlines, nsamps):
+        '''
+        Create a new band in IPW that is placed at the end if bands already
+        exist.
+        '''
+        
+        # creaet a new empty band
+        band = Band(nlines,nsamps)
+        
+        # add to the end of IPW bands
+        self.bands.append(band)
+        
+        # adjust the number of band value
+        self.nbands = len(self.bands)
+        
+        
 
-        Parameters
-        ----------
-        band : int or string
-            index of band, 1st band is "0"
-            string name of raster band e.g. "ro_predicted"
+#     def colorize(self, dst_fname, band, colormap, ymin=None, ymax=None,
+#                  drivername='Gtiff'):
+#         """
+#         colorize(band[, colormap][, ymin=None][, ymax=None])
+# 
+#         Build a colorized georeferenced raster of a band
+# 
+#         Parameters
+#         ----------
+#         band : int or string
+#             index of band, 1st band is "0"
+#             string name of raster band e.g. "ro_predicted"
+# 
+#         colormap : string
+#             name of a matplotlib.colors colormap
+# 
+#         ymin : None or float
+#             float specifies the min value for normalization
+#             None will use min value of data
+# 
+#         ymax : None or float
+#             float specifies the max value for normalization
+#             None will use max value of data
+#         """
+#         bands = self.bands
+#         nsamps, nlines = self.nsamps, self.nlines
+# 
+#         # find band
+#         try:
+#             band = bands[int(band)]
+#         except:
+#             band = self[band]
+# 
+#         # build normalize function
+#         if ymin is None:
+#             ymin = (0.0, band.float_min)[self.rescale]
+# 
+#         if ymax is None:
+#             ymax = (2.0**band.bits - 1.0, band.float_max)[self.rescale]
+# 
+#         assert ymax > ymin
+# 
+#         norm_func = Normalize(ymin, ymax, clip=True)
+# 
+#         # colorize band
+#         cm = plt.get_cmap(colormap)
+#         rgba = np.array(cm(norm_func(band.data)) * 255.0, dtype=np.uint8)
+# 
+#         # find geotransform
+#         for b in bands:
+#             gt0 = b.geotransform
+#             if gt0 is not None:
+#                 break
+# 
+#         # initialize raster
+#         driver = GetDriverByName(drivername)
+#         ds = driver.Create(dst_fname, nsamps, nlines,
+#                            4, gdalconst.GDT_Byte)
+# 
+#         # set projection
+#         if epsg is not None:
+#             proj = osr.SpatialReference()
+#             status = proj.ImportFromEPSG(epsg)
+#             if status != 0:
+#                 warnings.warn('Importing epsg %i return error code %i'
+#                               % (epsg, status))
+#             ds.SetProjection(proj.ExportToWkt())
+# 
+#         # set geotransform
+#         if gt0 is None:
+#             warnings.warn('Unable to find a geotransform')
+#         else:
+#             # set transform
+#             ds.SetGeoTransform(gt0)
+# 
+#         # write data
+#         for i in xrange(4):
+#             ds.GetRasterBand(i+1).WriteArray(rgba[:, :, i])
+# 
+#         ds = None  # Writes and closes file
 
-        colormap : string
-            name of a matplotlib.colors colormap
-
-        ymin : None or float
-            float specifies the min value for normalization
-            None will use min value of data
-
-        ymax : None or float
-            float specifies the max value for normalization
-            None will use max value of data
-        """
-        bands = self.bands
-        nsamps, nlines = self.nsamps, self.nlines
-
-        # find band
-        try:
-            band = bands[int(band)]
-        except:
-            band = self[band]
-
-        # build normalize function
-        if ymin is None:
-            ymin = (0.0, band.float_min)[self.rescale]
-
-        if ymax is None:
-            ymax = (2.0**band.bits - 1.0, band.float_max)[self.rescale]
-
-        assert ymax > ymin
-
-        norm_func = Normalize(ymin, ymax, clip=True)
-
-        # colorize band
-        cm = plt.get_cmap(colormap)
-        rgba = np.array(cm(norm_func(band.data)) * 255.0, dtype=np.uint8)
-
-        # find geotransform
-        for b in bands:
-            gt0 = b.geotransform
-            if gt0 is not None:
-                break
-
-        # initialize raster
-        driver = GetDriverByName(drivername)
-        ds = driver.Create(dst_fname, nsamps, nlines,
-                           4, gdalconst.GDT_Byte)
-
-        # set projection
-        if epsg is not None:
-            proj = osr.SpatialReference()
-            status = proj.ImportFromEPSG(epsg)
-            if status != 0:
-                warnings.warn('Importing epsg %i return error code %i'
-                              % (epsg, status))
-            ds.SetProjection(proj.ExportToWkt())
-
-        # set geotransform
-        if gt0 is None:
-            warnings.warn('Unable to find a geotransform')
-        else:
-            # set transform
-            ds.SetGeoTransform(gt0)
-
-        # write data
-        for i in xrange(4):
-            ds.GetRasterBand(i+1).WriteArray(rgba[:, :, i])
-
-        ds = None  # Writes and closes file
-
-    def translate(self, dst_fname, writebands=None,
-                  drivername='Gtiff', multi=True):
-        """
-        translate(dst_dataset[, bands=None][, drivername='GTiff']
-                  [, multi=True])
-
-        translates the data to a georeferenced tif.
-
-        Parameters
-        ----------
-        dst_fname : string
-           path to destination file without extension.
-           Assumes folder exists.
-
-        writebands : None or iterable of integers
-            Specifies which bands to write to file.
-            Bands are written in the order specifed.
-
-            If none, all bands will be written to file
-            The first band is "0" (like iSNOBAL, not like GDAL)
-
-        multi : bool (default True)
-            True write each band to its own dataset
-            False writes all the bands to a single dataset
-        """
-        if writebands is None:
-            writebands = range(self.nbands)
-
-        if multi:
-            for i in writebands:
-                self._translate(dst_fname + '.%02i'%i, [i], drivername)
-        else:
-            self._translate(dst_fname, writebands, drivername)
-
-    def _translate(self, dst_fname, writebands=None, drivername='Gtiff'):
-        epsg = self.epsg
-        rescale = self.rescale
-        bands = self.bands
-        nbands = self.nbands
-        nlines, nsamps = self.nlines, self.nsamps
-
-        if writebands is None:
-            writebands = range(nbands)
-
-        num_wb = len(writebands)
-
-        assert num_wb >= 1
-
-        # The first band of the inputs doesn't have a
-        # geotransform. I'm sure this is a feature and not a bug ;)
-        #
-        # Check to make sure the defined geotransforms are the same
-        #
-        # Haven't really found any cases where multiple bands have
-        # different projections. Is this really a concern?
-        gt_override = 0
-
-        # search write bands for valid transform
-        for i in writebands:
-            gt0 = bands[i].geotransform
-            if gt0 is not None:
-                break
-
-        if gt0 is None:
-            # search all bands for valid transform
-            for b in bands:
-                gt0 = b.geotransform
-                if gt0 is not None:
-                    gt_override = 1
-                    break
-            if gt0 is None:
-                raise Exception('No Projection Found')
-            else:
-                warnings.warn('Using Projection from another band')
-
-        if not gt_override:
-            for i in writebands:
-                gt = bands[i].geotransform
-                if gt is None:
-                    continue
-                assert_array_almost_equal(gt0, gt)
-
-        # If the data hasn't been rescaled all bands are written as
-        # Float 32. If the data has not been scaled the type is
-        # Uint8 if all channels are Uint8 and Uint16 otherwise
-        if rescale:
-            gdal_type = gdalconst.GDT_Float32
-        else:
-            if all([bands[i].bytes == 1 for i in writebands]):
-                gdal_type = gdalconst.GDT_Byte
-            else:
-                gdal_type = gdalconst.GDT_UInt16
-
-        # initialize raster
-        driver = gdal.GetDriverByName(drivername)
-        ds = driver.Create(dst_fname + '.tif', nsamps, nlines,
-                           num_wb, gdal_type)
-
-        # set projection
-        if epsg is not None:
-            proj = osr.SpatialReference()
-            status = proj.ImportFromEPSG(epsg)
-            if status != 0:
-                warnings.warn('Importing epsg %i return error code %i'
-                              %(epsg, status))
-            ds.SetProjection(proj.ExportToWkt())
-
-        # set geotransform
-        ds.SetGeoTransform(gt0)
-
-        # write data
-        j = 1
-        for i in writebands:
-            ds.GetRasterBand(j).WriteArray(bands[i].data)
-            j += 1
-
-        ds = None  # Writes and closes file
+#     def translate(self, dst_fname, writebands=None,
+#                   drivername='Gtiff', multi=True):
+#         """
+#         translate(dst_dataset[, bands=None][, drivername='GTiff']
+#                   [, multi=True])
+# 
+#         translates the data to a georeferenced tif.
+# 
+#         Parameters
+#         ----------
+#         dst_fname : string
+#            path to destination file without extension.
+#            Assumes folder exists.
+# 
+#         writebands : None or iterable of integers
+#             Specifies which bands to write to file.
+#             Bands are written in the order specifed.
+# 
+#             If none, all bands will be written to file
+#             The first band is "0" (like iSNOBAL, not like GDAL)
+# 
+#         multi : bool (default True)
+#             True write each band to its own dataset
+#             False writes all the bands to a single dataset
+#         """
+#         if writebands is None:
+#             writebands = range(self.nbands)
+# 
+#         if multi:
+#             for i in writebands:
+#                 self._translate(dst_fname + '.%02i'%i, [i], drivername)
+#         else:
+#             self._translate(dst_fname, writebands, drivername)
+# 
+#     def _translate(self, dst_fname, writebands=None, drivername='Gtiff'):
+#         epsg = self.epsg
+#         rescale = self.rescale
+#         bands = self.bands
+#         nbands = self.nbands
+#         nlines, nsamps = self.nlines, self.nsamps
+# 
+#         if writebands is None:
+#             writebands = range(nbands)
+# 
+#         num_wb = len(writebands)
+# 
+#         assert num_wb >= 1
+# 
+#         # The first band of the inputs doesn't have a
+#         # geotransform. I'm sure this is a feature and not a bug ;)
+#         #
+#         # Check to make sure the defined geotransforms are the same
+#         #
+#         # Haven't really found any cases where multiple bands have
+#         # different projections. Is this really a concern?
+#         gt_override = 0
+# 
+#         # search write bands for valid transform
+#         for i in writebands:
+#             gt0 = bands[i].geotransform
+#             if gt0 is not None:
+#                 break
+# 
+#         if gt0 is None:
+#             # search all bands for valid transform
+#             for b in bands:
+#                 gt0 = b.geotransform
+#                 if gt0 is not None:
+#                     gt_override = 1
+#                     break
+#             if gt0 is None:
+#                 raise Exception('No Projection Found')
+#             else:
+#                 warnings.warn('Using Projection from another band')
+# 
+#         if not gt_override:
+#             for i in writebands:
+#                 gt = bands[i].geotransform
+#                 if gt is None:
+#                     continue
+#                 assert_array_almost_equal(gt0, gt)
+# 
+#         # If the data hasn't been rescaled all bands are written as
+#         # Float 32. If the data has not been scaled the type is
+#         # Uint8 if all channels are Uint8 and Uint16 otherwise
+#         if rescale:
+#             gdal_type = gdalconst.GDT_Float32
+#         else:
+#             if all([bands[i].bytes == 1 for i in writebands]):
+#                 gdal_type = gdalconst.GDT_Byte
+#             else:
+#                 gdal_type = gdalconst.GDT_UInt16
+# 
+#         # initialize raster
+#         driver = gdal.GetDriverByName(drivername)
+#         ds = driver.Create(dst_fname + '.tif', nsamps, nlines,
+#                            num_wb, gdal_type)
+# 
+#         # set projection
+#         if epsg is not None:
+#             proj = osr.SpatialReference()
+#             status = proj.ImportFromEPSG(epsg)
+#             if status != 0:
+#                 warnings.warn('Importing epsg %i return error code %i'
+#                               %(epsg, status))
+#             ds.SetProjection(proj.ExportToWkt())
+# 
+#         # set geotransform
+#         ds.SetGeoTransform(gt0)
+# 
+#         # write data
+#         j = 1
+#         for i in writebands:
+#             ds.GetRasterBand(j).WriteArray(bands[i].data)
+#             j += 1
+# 
+#         ds = None  # Writes and closes file
 
     def __str__(self):
         s = ['''\
@@ -741,46 +768,46 @@ def _packgrp(root, grp, wc, varlist, nbands=None):
         root[grp].create_dataset(key, data=data[:, :, i])
 
 
-def packToHd5(in_path, out_path=None, fname=None):
-    """
-    packToHd5(in_path[, out_path][, fname=None])
-
-    Packs input and output data into an hdf5 container
-
-    Parameters
-    in_path : string
-        path to file containing input IPW files
-
-    out_path : string
-        path to file containing output IPW files
-
-    """
-    if fname is None:
-        fname = 'insnobal_data.hd5'
-
-    if not os.path.isdir(in_path):
-        raise Exception('in_path should be a directory')
-
-    if out_path is None:
-        out_path = in_path
-
-    if not os.path.isdir(out_path):
-        raise Exception('out_path should be a directory')
-
-    root = h5py.File(fname, 'w')
-
-    # Process in_db files
-    # Some of the input files have 5 bands, some have 6
-    wc = os.path.join(in_path, 'in.*')
-    _packgrp(root, 'in_db', wc, in_db__vars, nbands=6)
-
-    # Process out_em files
-    wc = os.path.join(out_path, 'em.*')
-    _packgrp(root, 'out_em', wc, out_em__vars)
-
-    # Process out_snow files
-    wc = os.path.join(out_path, 'snow.*')
-    _packgrp(root, 'out_snow', wc, out_snow__vars)
-
-    root.close()
-    
+# def packToHd5(in_path, out_path=None, fname=None):
+#     """
+#     packToHd5(in_path[, out_path][, fname=None])
+# 
+#     Packs input and output data into an hdf5 container
+# 
+#     Parameters
+#     in_path : string
+#         path to file containing input IPW files
+# 
+#     out_path : string
+#         path to file containing output IPW files
+# 
+#     """
+#     if fname is None:
+#         fname = 'insnobal_data.hd5'
+# 
+#     if not os.path.isdir(in_path):
+#         raise Exception('in_path should be a directory')
+# 
+#     if out_path is None:
+#         out_path = in_path
+# 
+#     if not os.path.isdir(out_path):
+#         raise Exception('out_path should be a directory')
+# 
+#     root = h5py.File(fname, 'w')
+# 
+#     # Process in_db files
+#     # Some of the input files have 5 bands, some have 6
+#     wc = os.path.join(in_path, 'in.*')
+#     _packgrp(root, 'in_db', wc, in_db__vars, nbands=6)
+# 
+#     # Process out_em files
+#     wc = os.path.join(out_path, 'em.*')
+#     _packgrp(root, 'out_em', wc, out_em__vars)
+# 
+#     # Process out_snow files
+#     wc = os.path.join(out_path, 'snow.*')
+#     _packgrp(root, 'out_snow', wc, out_snow__vars)
+# 
+#     root.close()
+#     

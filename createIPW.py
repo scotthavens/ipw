@@ -59,19 +59,33 @@ tmp = np.flipud(v[timeStep,:,:] + offset)
 # plot the variable
 #===============================================================================
 
-plt.imshow(tmp)
-plt.colorbar()
-plt.show()
+# plt.imshow(tmp)
+# plt.colorbar()
+# plt.show()
 
 #===============================================================================
 # Begin to create the IPW file 
 #===============================================================================
 
-ipw = i.IPW();
+'''
+To add a new band to the file
+- new_band(data, bits)
+-- get nsamps and nlines from the data, ensure that they are the same if bands
+-- already exist
+-- fill in some of the basic header information like bits and bytes (basic_image_
 
+- add_geo_hdr(band number, geo data)
+-- adds the geo data to the given band
+
+ 
+'''
+
+ipw = i.IPW();
+ipw.new_band(100, 100)
 
 ipw.bands = 1
 
+print(ipw)
 
 #             self._data_frame = None
 #             self.input_file = None
