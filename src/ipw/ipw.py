@@ -12,14 +12,14 @@ __version__ = "0.0.1"
 from glob import glob
 import os
 # import time
-import warnings
+# import warnings
 
 # import h5py
 import numpy as np
-from numpy.testing import assert_array_almost_equal
+# from numpy.testing import assert_array_almost_equal
 from math import ceil
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize, ListedColormap
+# from matplotlib.colors import Normalize, ListedColormap
 
 # from osgeo import gdal, gdalconst, ogr, osr
 
@@ -74,10 +74,9 @@ class Band:
 
         self.data = None
 
-    def _parse_geo(self, L0, L1, L2, L3, L4, L5):
+    def _parse_geo_readline(self, L0, L1, L2, L3, L4, L5):
         """
-        sets attributes and builds GDAL ordered
-        geotransform list
+        Get the geo header information from readline()
         """
         bline = self.bline = _unpackfloat(L0)
         bsamp = self.bsamp = _unpackfloat(L1)
@@ -85,6 +84,21 @@ class Band:
         dsamp = self.dsamp = _unpackfloat(L3)
         self.geounits = _unpackstr(L4)
         self.coord_sys_ID = _unpackstr(L5)
+        self.geotransform = [bsamp - dsamp / 2.0,
+                             dsamp, 0.0,
+                             bline - dline / 2.0,
+                             0.0, dline]
+        
+    def _parse_geo(self, L0, L1, L2, L3, L4, L5):
+        """
+        Get the geo header information given values
+        """
+        bline = self.bline = L0
+        bsamp = self.bsamp = L1
+        dline = self.dline = L2
+        dsamp = self.dsamp = L3
+        self.geounits = L4
+        self.coord_sys_ID = L5
         self.geotransform = [bsamp - dsamp / 2.0,
                              dsamp, 0.0,
                              bline - dline / 2.0,
@@ -163,7 +177,7 @@ class IPW:
             self.fname = None
             self.bands = []
             self.bip = None
-            self.byteorder = None
+            self.byteorder = [0,1,2,3]
             self.nlines = None
             self.nsamps = None
             self.nbands = None
@@ -238,7 +252,7 @@ class IPW:
 
             elif '!<header> geo' in line:
                 indx = _unpackindx(line)
-                bands[indx]._parse_geo(*[readline() for i in xrange(6)])
+                bands[indx]._parse_geo_readline(*[readline() for i in xrange(6)])
                 geo = 1
 
             elif '!<header> lq' in line:
@@ -329,6 +343,8 @@ class IPW:
             self.bands[i].bytes = int(ceil(float(nbits)/8))     
             self.bands[i].int_min = 0
             self.bands[i].int_max = 2**nbits - 1
+            self.bands[i].float_max = np.amax(self.bands[i].data)
+            self.bands[i].float_min = np.amin(self.bands[i].data)
             
         # prepare the headers        
         last_line = "!<header> image -1 $Revision: 1.5 $"
@@ -359,7 +375,8 @@ class IPW:
 
             # write the binary data
             data = self._convert_float_to_int(nbits)
-            data.tofile(f)
+            for i in range(data.shape[0]):
+                data[i,:,:].tofile(f)
 
             # close the file
             f.close()
@@ -513,20 +530,111 @@ class IPW:
         return self.bands[self.name_dict[key]]
 
 
-    def new_band(self, nlines, nsamps):
+    def new_band(self, data):
         '''
         Create a new band in IPW that is placed at the end if bands already
         exist.
         '''
         
-        # creaet a new empty band
+        # get the size of data
+        nlines, nsamps = data.shape
+              
+        # check if there are other bands
+        if self.nbands is not None:
+            assert nlines == self.nlines
+            assert nsamps == self.nsamps
+        else:
+#             self.byteorder = [0,1,2,3]
+            self.nlines = nlines
+            self.nsamps = nsamps
+            
+               
+        # create a new empty band
         band = Band(nlines,nsamps)
+        
+        # add the data
+        band.data = data
         
         # add to the end of IPW bands
         self.bands.append(band)
         
         # adjust the number of band value
         self.nbands = len(self.bands)
+
+
+    def add_geo_hdr(self, coordinates, d, units, csys, band='all'):
+        '''
+        Add geo header information to the band
+        
+        Args:
+        coordinates -- [u, v] The coordinates of image line 0 and sample 0 in csys are u and v, respectively.
+        d --  [dx, dy] The distances between adjacent image lines and samples in csys are du and dv, respectively.
+        units -- u, v, du, and dv are specified in units (e.g., "meters", "km").
+        csys -- The geodetic coordinate system identifier is csys (e.g., "UTM", "Lambert").  See the manual for  mkproj
+              for a list of standard names for coordinate systems.
+        band (optional) -- [0,1,4,...] The "geo" header will be applied only to the specified bands (default: all bands).
+        
+        if 'all' for band number then do all, or a subset from array?
+        
+        # geo
+        self.bline = None
+        self.bsamp = None
+        self.dline = None
+        self.dsamp = None
+        self.geounits = None
+        self.coord_sys_ID = None
+        self.geotransform = None
+        
+         mkgeoh -o coord,coord -d incr,incr -u units -c csys [-b band,...] [-f] [image]
+        '''
+        
+        # Check the inputs
+        if len(coordinates) != 2:
+            raise SyntaxError('Coordinates must have two values [u, v]')
+        
+        if len(d) != 2:
+            raise SyntaxError('d must have two values [du, dv]')
+        
+        
+        if band == 'all':
+            band = range(0,self.nbands)     # all bands
+        elif type(band) == int:
+            band = [band]                   # single band
+            
+            
+            
+        # loop through each band and add the header
+        for bidx in band:
+            
+            self.bands[bidx]._parse_geo(coordinates[0],
+                                        coordinates[1],
+                                        d[0],
+                                        d[1],
+                                        units,
+                                        csys)
+            
+        self.geohdr = 1
+            
+#             def _parse_geo(self, L0, L1, L2, L3, L4, L5):
+#         """
+#         sets attributes and builds GDAL ordered
+#         geotransform list
+#         """
+#         bline = self.bline = _unpackfloat(L0)
+#         bsamp = self.bsamp = _unpackfloat(L1)
+#         dline = self.dline = _unpackfloat(L2)
+#         dsamp = self.dsamp = _unpackfloat(L3)
+#         self.geounits = _unpackstr(L4)
+#         self.coord_sys_ID = _unpackstr(L5)
+#         self.geotransform = [bsamp - dsamp / 2.0,
+#                              dsamp, 0.0,
+#                              bline - dline / 2.0,
+#                              0.0, dline]
+#         
+        
+        
+        
+        
         
         
 

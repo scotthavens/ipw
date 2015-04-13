@@ -12,7 +12,7 @@ This will only deal with variables that are 3D and not the 4D variables (yet)
 import netCDF4 as nc
 import numpy as np
 import matplotlib.pyplot as plt
-
+from ipw import ipw as i
 
 #===============================================================================
 # Setup the input values for the file to grab 
@@ -70,6 +70,12 @@ plt.show()
 
 # Close the file
 f.close()
+
+
+# create a new file
+ipw = i.IPW()
+ipw.
+
 
 
 

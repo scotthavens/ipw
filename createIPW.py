@@ -9,7 +9,8 @@ Wrapper script to specify a matrix and export it into an IPW file
 
 
 import numpy as np
-from ipw import ipw as i
+from ipw import ipw, netcdf
+# import ipw
 import netCDF4 as nc
 import matplotlib.pyplot as plt
 
@@ -53,7 +54,12 @@ print(dimNames,dimSizes)
 #===============================================================================
 
 tmp = np.flipud(v[timeStep,:,:] + offset)
+# print(len(tmp))
+# print(len(tmp[0]))
+# print(tmp.shape)
 
+# Close the file
+f.close()
 
 #===============================================================================
 # plot the variable
@@ -67,40 +73,32 @@ tmp = np.flipud(v[timeStep,:,:] + offset)
 # Begin to create the IPW file 
 #===============================================================================
 
-'''
-To add a new band to the file
-- new_band(data, bits)
--- get nsamps and nlines from the data, ensure that they are the same if bands
--- already exist
--- fill in some of the basic header information like bits and bytes (basic_image_
+i = ipw.IPW();      # initialize a new file
+i.new_band(tmp)   # add data to the band
+i.new_band(tmp)   # add data to the band
 
-- add_geo_hdr(band number, geo data)
--- adds the geo data to the given band
+i.add_geo_hdr([4886900, 570100], [-100,100], 'm', 'UTM')
 
- 
-'''
+# print(i)
 
-ipw = i.IPW();
-ipw.new_band(100, 100)
 
-ipw.bands = 1
 
-print(ipw)
+#===============================================================================
+# Wrtie netcdf file to data 
+#===============================================================================
+n = netcdf.netcdf(fileName)
+n.netcdf2ipw('T2',0,'ta_')
+n.add_geo_hdr([4886900, 570100], [-100,100], 'm', 'UTM')
+n.write_ipw(16)
 
-#             self._data_frame = None
-#             self.input_file = None
-#             self.file_type = None
-#             self.header_dict = None
-#             self.binary_data = None
-#             self.bands = None
-#             self.nonglobal_bands = None
-#             self.geotransform = None
-#             self.start_datetime = None
-#             self.end_datetime = None
 
-# Close the file
-f.close()
 
+i = ipw.IPW('./data/ta_0000')
+
+plt.imshow(i.bands[0].data)
+plt.colorbar()
+
+plt.show()
 
 
 
