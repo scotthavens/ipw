@@ -20,7 +20,9 @@ import matplotlib.pyplot as plt
 #===============================================================================
 
 fileName = 'test.nc'    # file to load
-var = 'GLW'              # variable to load
+fileName = '/Volumes/Drobo1/BRB/BRB-wy09/spatial_WRF/data/wrf_data/Regrid/'
+
+var = 'T2'              # variable to load
 timeStep = 9            # timestep to load
 outDir = './data/'           # direcotry to put the new file
 outPrefix = 'ta'        # prefix to use for the IPW file

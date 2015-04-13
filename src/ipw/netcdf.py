@@ -12,6 +12,8 @@ import numpy as np
 import ipw
 import netCDF4 as nc
 import os
+import progressbar
+# import sys
 # import matplotlib.pyplot as plt
 
 
@@ -94,7 +96,12 @@ class netcdf:
         if not os.path.exists(outDir):
             os.makedirs(outDir)
         
+        pbar = progressbar.ProgressBar(len(timeStep)).start()
+        j = 0
         for time in timeStep:
+            
+            j += 1
+            pbar.update(j)
             
             # create the file name to save the file to
             fileName = os.path.join(outDir,outPrefix + '%04i' % time)
@@ -116,6 +123,7 @@ class netcdf:
             self.ipw.append(i)
             i = None
             
+        pbar.finish()
         
     def add_geo_hdr(self, coordinates, d, units, csys, band='all'):
         '''
@@ -134,9 +142,13 @@ class netcdf:
         like adding geo headers before writing           
         '''
         
-        for i in self.ipw:
+        pbar = progressbar.ProgressBar(len(self.ipw)).start()
+        
+        for j,i in enumerate(self.ipw):
+            pbar.update(j+1)
             i.write(i.fname, nbits)
             
+        pbar.finish()
         
     def ipw2netcdf(self):
         '''
