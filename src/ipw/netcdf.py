@@ -13,6 +13,7 @@ import ipw
 import netCDF4 as nc
 import os
 import progressbar
+import warnings
 # import sys
 # import matplotlib.pyplot as plt
 
@@ -27,7 +28,10 @@ class netcdf:
         '''
         Args:
         fileName - file name to the existing or new netCDF file
-        rw (default 'r'/read) - how to open the file 'r','w',
+        rw (default 'r'/read) - how to open the file 'r','w','r+'
+            'r' - read only
+            'w' - !!WARNING!! Will overwrite the existing file
+            'r+' - append to the file
         '''
         
         self.netcdf = None
@@ -42,7 +46,7 @@ class netcdf:
             self.fileName = fileName     # file to load           
             
             # netCDF object
-            self.netcdf = nc.Dataset(fileName, rw)
+            self.netcdf = nc.Dataset(fileName, rw, clobber=False)
             
             # if it exists get some information about the netCDF file
             if os.path.isfile(fileName):
@@ -150,11 +154,74 @@ class netcdf:
             
         pbar.finish()
         
-    def ipw2netcdf(self):
+    def ipw2netcdf(self, variable, fileDir):
         '''
         Take a directory of IPW images, read in, and add to a netcdf
         '''
         
+        
+        
+    def add_image(self, image, varName, timeStep=None, band=0):
+        '''
+        Add a sinle band from an IPW image specified by image to the netcdf
+        
+        Args:
+        image - IPW image location
+        varName - variable to assign data to
+        timeStep (default=None) - timeStep to enter data into
+            if timeStep=None, add_image expects a 2D variable
+        band (default=0) - if a multi-band image, add this band
+        '''
+        
+        # check to make sure that the image exists
+        if not os.path.isfile(image):
+            raise IOError('Could not find file -- %s' % image)
+        
+        # get the IPW file
+        i = ipw.IPW(image)
+        
+        # add the data to the netCDF file
+        if timeStep is not None:
+            self.netcdf.variables[varName][timeStep,:] =  np.flipud(i.bands[band].data)
+        else:
+            self.netcdf.variables[varName][:] =  np.flipud(i.bands[band].data)
+        
+    
+    def add_image_directory(self, dirName, prefix, varName, band=0):
+        '''
+        Read in all the ipw images in a direcotry
+        
+        Args:
+        dirName - direcotry name
+        prefix - prefix to the ipw images
+        varName - variable name to load into
+        band (default=0) - if a multi-band image, add this band
+        '''  
+    
+    
+    
+        
+        
+    def add_variable(self, varName, dimensions, datatype='f'):
+        '''
+        Add a variable if it doesn't exist to the netCDF file with dimensions already defined
+        This allows the user to repeatidly call this method with having
+        netCDF4 raise an execption if the variable exists
+        
+        Args:
+        varName - name of variable
+        dimensions - tuple of dimension names
+        datatype (default='float') - type of data to store
+        '''
+        
+        # check if the variable already exists
+        if varName in self.netcdf.variables.keys():
+            warnings.warn('Variable -- %s -- is already in the netCDF file' % varName)
+        
+        else:
+            # create the variable
+            self.netcdf.createVariable(varName, datatype, dimensions)
+     
      
      
     def close(self):
