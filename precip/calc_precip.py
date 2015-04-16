@@ -20,7 +20,7 @@ startTime = datetime.now()
 #===============================================================================
 # IPW output file
 #===============================================================================
-outDir = './ppt.4b/'        # direcotry to put the new file
+outDir = '../data/'        # direcotry to put the new file
 outPrefix = 'ppt.4b_'       # prefix to use for the IPW file
 
 u = 4770050
@@ -58,7 +58,7 @@ setattr(n.netcdf.variables[varName], 'description', 'Snow Density')
 # Calculate % snow and snow density
 #===============================================================================
 
-timeStep = range(100)        # timestep to load
+timeStep = range(22,23)        # timestep to load
 
 pbar = progressbar.ProgressBar(len(timeStep)).start()
 j = 0
@@ -67,12 +67,10 @@ for t in timeStep:
         
     # get the precip value
     p = n.netcdf.variables['RAINNC'][t,:]
-    p = np.flipud(p)
     
     # get the dew point value
     d = n.netcdf.variables['dwpt'][t,:]
-    d = np.flipud(d)
-
+    
     # determine the precip phase
     ps, sd = precip.mkprecip(p, d)
 
@@ -80,8 +78,15 @@ for t in timeStep:
     n.netcdf.variables['perc_snow'][t,:] = ps
     n.netcdf.variables['snow_density'][t,:] = sd
     
+    
     # write the  4-band precipitation image if there is precip
-    if np.sum(p > 0):
+    if np.sum(p) > 0:   
+        
+         # flip dimensions for IPW file
+        p = np.flipud(p)
+        d = np.flipud(d)
+        
+             
         i = ipw.IPW()
         i.new_band(p)
         i.new_band(ps)
@@ -89,6 +94,8 @@ for t in timeStep:
         i.new_band(d)
         i.add_geo_hdr([u, v], [du, dv], units, csys)
         i.write('%s%s%04i' % (outDir, outPrefix, t), nbits)
+        
+        i = ipw.IPW('%s%s%04i' % (outDir, outPrefix, t))
     
     
     j += 1
@@ -100,25 +107,25 @@ pbar.finish()
 
 # results = [pool.apply_async(calc_stuff, args=(x,)) for x in timeStep]
 
-    
-#     plt.figure(1)
-#     plt.subplot(221)
-#     plt.imshow(p)
-#     plt.colorbar()
-#      
-#     plt.subplot(222)
-#     plt.imshow(d)
-#     plt.colorbar()
-#      
-#     plt.subplot(223)
-#     plt.imshow(ps)
-#     plt.colorbar()
-#      
-#     plt.subplot(224)
-#     plt.imshow(sd)
-#     plt.colorbar()
-#      
-#     plt.show()
+
+plt.figure(1)
+plt.subplot(221)
+plt.imshow(p)
+plt.colorbar()
+  
+plt.subplot(222)
+plt.imshow(i.bands[0].data)
+plt.colorbar()
+  
+plt.subplot(223)
+plt.imshow(ps)
+plt.colorbar()
+  
+plt.subplot(224)
+plt.imshow(sd)
+plt.colorbar()
+  
+plt.show()
     
     
 n.close()

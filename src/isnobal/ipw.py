@@ -340,7 +340,8 @@ class IPW:
         # have to convert nbits one to float then back at the end for ceil to work
         for i, b in enumerate(self.bands):
             self.bands[i].bits = nbits
-            self.bands[i].bytes = int(ceil(float(nbits)/8))     
+            bytes = self.bands[i].bytes = int(ceil(float(nbits)/8))
+            self.bands[i].frmt = 'uint' + str(bytes*8)    
             self.bands[i].int_min = 0
             self.bands[i].int_max = 2**nbits - 1
             self.bands[i].float_max = np.amax(self.bands[i].data)
@@ -373,10 +374,11 @@ class IPW:
             # write the last header line to the file
             f.write(last_line + '\f\n')
 
-            # write the binary data
+            # Convert the data to a structured array write the binary data
             data = self._convert_float_to_int(nbits)
-            for i in range(data.shape[0]):
-                data[i,:,:].tofile(f)
+#             for i in range(data.shape[0]):
+#                 data[i,:,:].tofile(f)
+            data.tofile(f)
 
             # close the file
             f.close()
@@ -499,7 +501,12 @@ class IPW:
         Convert the data floating point data to mapped integer
         """
 
-        data_int = []
+        # define a structure array
+        dt = np.dtype([(b.name, b.frmt) for b in self.bands])
+        data_int = np.zeros((self.nlines, self.nsamps,), dt)
+
+
+#         data_int = []
         for b in self.bands:
     
             # no need to include b.int_min, it's always zero
@@ -507,15 +514,16 @@ class IPW:
                 np.round(
                     ((x - b.float_min) * b.int_max)/(b.float_max - b.float_min))
     
-            data_int.append(map_fn(b.data))
+#             data_int.append(map_fn(b.data))
+            data_int[b.name] = (map_fn(b.data))
     
         # change to np array with correct datatype
-        x = np.array(data_int)
-        nbytes = self._bits_to_bytes(nbits)
-        x = x.astype('uint' + str(8*nbytes))
+#         x = np.array(data_int)
+#         nbytes = self._bits_to_bytes(nbits)
+#         x = x.astype('uint' + str(8*nbytes))
 #         x = x.astype('int' + str(nbits))
 
-        return x
+        return data_int
     
     def _bits_to_bytes(self, nbits):
         '''

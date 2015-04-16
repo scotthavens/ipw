@@ -4,41 +4,41 @@ Test reading an ipw file
 
 
 import numpy as np
-from ipw import ipw as i
+from isnobal import ipw
 import netCDF4 as nc
 import matplotlib.pyplot as plt
 import subprocess as sp
 
 
-fileName = '/Users/scott/Documents/Projects/isnobal/python/test_1band.ipw'
+fileName = '../in.3000'
 
 
-ipw = i.IPW(fileName)
+o = ipw.IPW(fileName)
 # print(ipw)
 
-ipw.write('out.ipw',12)
+o.write('out.ipw',16)
 
 
 # load both and compare
-o = i.IPW(fileName)
-n = i.IPW('out.ipw')
-
+# o = ipw.IPW(fileName)
+n = ipw.IPW('out.ipw')
+ 
 d = o.bands[0].data - n.bands[0].data
-
+ 
 print(sum(sum(d)))
-
-# print(ipw.header_lines)
-# print(ipw.binary_data[:100])
+ 
+# print(i.header_lines)
+# print(i.binary_data[:100])
 
 
 plt.subplot(131)
-plt.imshow(o.bands[0].data)
+plt.imshow(o.bands[1].data)
 plt.colorbar()
 
 plt.subplot(132)
-plt.imshow(n.bands[0].data)
+plt.imshow(n.bands[1].data)
 plt.colorbar()
-
+ 
 plt.subplot(133)
 plt.imshow(d)
 plt.colorbar()
