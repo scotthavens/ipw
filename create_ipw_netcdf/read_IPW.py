@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import subprocess as sp
 
 
-fileName = '../in.3000'
+fileName = '../test_1band.ipw'
 
 
 o = ipw.IPW(fileName)
@@ -32,11 +32,11 @@ print(sum(sum(d)))
 
 
 plt.subplot(131)
-plt.imshow(o.bands[1].data)
+plt.imshow(o.bands[0].data)
 plt.colorbar()
 
 plt.subplot(132)
-plt.imshow(n.bands[1].data)
+plt.imshow(n.bands[0].data)
 plt.colorbar()
  
 plt.subplot(133)

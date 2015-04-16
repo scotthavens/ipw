@@ -339,9 +339,10 @@ class IPW:
         # set the bits, bytes, and int_max for each band
         # have to convert nbits one to float then back at the end for ceil to work
         for i, b in enumerate(self.bands):
+            self.bands[i].name = 'band%02i'%i
             self.bands[i].bits = nbits
             bytes = self.bands[i].bytes = int(ceil(float(nbits)/8))
-            self.bands[i].frmt = 'uint' + str(bytes*8)    
+            self.bands[i].frmt = 'uint' + str(bytes*8)
             self.bands[i].int_min = 0
             self.bands[i].int_max = 2**nbits - 1
             self.bands[i].float_max = np.amax(self.bands[i].data)
