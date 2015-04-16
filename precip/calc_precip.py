@@ -1,9 +1,9 @@
 '''
 Created April 15, 2015
 
-Load the distributed precipitation and do the following:
-1. Calculate time since last storm
-2. Albedo
+Load the distributed precipitation / dew point and do the following:
+1. Percent precip as snow
+2. Snow density
 
 @author: Scott Havens
 '''
