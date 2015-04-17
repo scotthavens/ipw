@@ -1,14 +1,4 @@
 '''
-Created April 16, 2015
-
-Load in the precip and calculate:
-1. The time since last storm
-2. Albedo
-
-@author: Scott Havens
-'''
-
-'''
 Created April 15, 2015
 
 Load the distributed precipitation and do the following:
@@ -51,81 +41,68 @@ dimensions = ('Time','south_north','west_east',)
 n = netcdf.netcdf(netcdfFile, 'r+')
 
 # create the variable and add some attributes
-# varName = 'storm_days'
-# n.add_variable(varName, dimensions)
-# setattr(n.netcdf.variables[varName], 'units', '%')
-# setattr(n.netcdf.variables[varName], 'description', 'Decimal days since storm')
+varName = 'storm_days'
+n.add_variable(varName, dimensions)
+setattr(n.netcdf.variables[varName], 'units', 'time step')
+setattr(n.netcdf.variables[varName], 'description', 'Time steps since last storm')
+
+varName = 'storm_precip'
+n.add_variable(varName, dimensions)
+setattr(n.netcdf.variables[varName], 'units', 'mm')
+setattr(n.netcdf.variables[varName], 'description', 'Accumulated storm precip')
  
 #===============================================================================
 # Calculate % snow and snow density
 #===============================================================================
 
-timeStep = range(21,22)        # timestep to load
+timeStep = range(100)        # timestep to load
 
 pbar = progressbar.ProgressBar(len(timeStep)).start()
 j = 0
 
+junk = n.netcdf.variables['RAINNC'][2,:];
+stormDays = np.zeros(junk.shape)
+stormPrecip = stormDays
 for t in timeStep:
         
     # get the precip value
     p = n.netcdf.variables['RAINNC'][t,:]
-#     p = np.flipud(p)
     
     # get snow percent
     ps = n.netcdf.variables['perc_snow'][t,:]
-#     ps = np.flipud(ps)
 
-    # determine the precip phase
-#     ps, sd = precip.mkprecip(p, d)
+    # determine the time since last storm
+    stormDays, stormPrecip = precip.storms(p, ps, 0.2, 2, stormDays, stormPrecip)
 
+      # output to the netcdf file
+    n.netcdf.variables['storm_days'][t,:] = stormDays
+    n.netcdf.variables['storm_precip'][t,:] = stormPrecip
 
-    plt.figure(1)
-    plt.subplot(221)
-    plt.imshow(p)
-    plt.colorbar()
-      
-    plt.subplot(222)
-    plt.imshow(ps)
-    plt.colorbar()
-      
-    plt.subplot(223)
-    plt.imshow(ps)
-    plt.colorbar()
-      
-#     plt.subplot(224)
-#     plt.imshow(sd)
+#     plt.figure(1)
+#     plt.subplot(221)
+#     plt.imshow(p)
 #     plt.colorbar()
-      
-    plt.show()
+#        
+#     plt.subplot(222)
+#     plt.imshow(ps)
+#     plt.colorbar()
+#        
+#     plt.subplot(223)
+#     plt.imshow(stormDays)
+#     plt.colorbar()
+#        
+#     plt.subplot(224)
+#     plt.imshow(stormPrecip)
+#     plt.colorbar()
+#        
+#     plt.show()
+#      
 
-
-    # output to the netcdf file
-#     n.netcdf.variables['perc_snow'][t,:] = ps
-#     n.netcdf.variables['snow_density'][t,:] = sd
-    
-    # write the  4-band precipitation image if there is precip
-#     if np.sum(p > 0):
-#         i = ipw.IPW()
-#         i.new_band(p)
-#         i.new_band(ps)
-#         i.new_band(sd)
-#         i.new_band(d)
-#         i.add_geo_hdr([u, v], [du, dv], units, csys)
-#         i.write('%s%s%04i' % (outDir, outPrefix, t), nbits)
-    
-    
     j += 1
     pbar.update(j)
  
  
 pbar.finish()
 
-
-# results = [pool.apply_async(calc_stuff, args=(x,)) for x in timeStep]
-
-    
-
-    
-    
 n.close()
 print datetime.now() - startTime
