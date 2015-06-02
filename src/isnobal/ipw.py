@@ -65,12 +65,12 @@ class Band:
         self.geotransform = None
 
         # lq
-        self.int_min = None
-        self.int_max = None
-        self.float_min = None
-        self.float_max = None
+        self.int_min = 0
+        self.int_max = 255
+        self.float_min = 0.0
+        self.float_max = 1.0
         self.units = None
-        self.transform = None
+        self.transform = lambda x: (1.0 - 0.0) * (x / 255) + 0
 
         self.data = None
 
@@ -117,8 +117,8 @@ class Band:
 
     def __str__(self):
         return '''\
-    nlines (width): {0.nlines}
-    nsamps (height): {0.nsamps}
+    nlines (height): {0.nlines}
+    nsamps (width): {0.nsamps}
     bytes: {0.bytes}
     transform: {0.int_min} -> {0.int_max}
                {0.float_min} -> {0.float_max}
@@ -309,6 +309,7 @@ class IPW:
         data = data.reshape(nlines, nsamps)
         for b in bands:
 #             if rescale:
+#                 b.data = np.array(data[b.name],dtype=np.float32)
                 b.data = np.array(b.transform(data[b.name]),
                                 dtype=np.float32)
 #             else:

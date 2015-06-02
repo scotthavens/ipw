@@ -24,7 +24,7 @@ class netcdf:
     '''
 
 
-    def __init__(self, fileName=None, rw='r'):
+    def __init__(self, fileName=None, rw='r', clobber=False):
         '''
         Args:
         fileName - file name to the existing or new netCDF file
@@ -46,7 +46,7 @@ class netcdf:
             self.fileName = fileName     # file to load           
             
             # netCDF object
-            self.netcdf = nc.Dataset(fileName, rw, clobber=False)
+            self.netcdf = nc.Dataset(fileName, rw, clobber)
             
             # if it exists get some information about the netCDF file
             if os.path.isfile(fileName):
