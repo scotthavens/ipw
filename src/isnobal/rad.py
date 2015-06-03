@@ -11,6 +11,7 @@ import numpy as np
 import datetime as dt
 import subprocess as sp
 import math
+from scipy import ndimage, interpolate
 import progressbar
 # from isnobal import ipw
 
@@ -107,7 +108,7 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     return alb_v, alb_ir
 
-def ihorizon(X, Y, Z, azm, searlen=100):
+def ihorizon(X, Y, Z, azm, mask=0):
     '''
     Calculate the horizon values for an entire DEM image
     for the desired azimuth
@@ -119,71 +120,162 @@ def ihorizon(X, Y, Z, azm, searlen=100):
         Y - vector of y-coordinates
         Z - matrix of elevation data
         azm - azimuth to calculate the horizon at
-        searlen - length of search (in pixels) to look for horizon
+        mask - 0 -> calculate cos(z)
+             - 1 -> calculate a mask whether or not the point can see the sun
     
     Outputs:
-        CZ - cosine of the local horizonal angles
-        H - index along line to the point
+        H   - if mask=0 cosine of the local horizonal angles
+            - if mask=1 index along line to the point
     
     20150602 Scott Havens 
     '''
     
     # check inputs
-    azm = azm*np.pi/180 # degress to radians
+#     azm = azm*np.pi/180 # degress to radians
     m,n = Z.shape
     dx = X[2] - X[1]    # DEM step size
+    cval = -99
     
+    # Rotate the DEM by the azimuth, values outsite of the
+    # old image will be set to cval
+    R = ndimage.interpolation.rotate(Z, azm, cval=cval)
+    mr,nr = R.shape
+    xr = dx*np.arange(mr)    # "coordinates" of the new rotated image
     
-    # preallocate
-    CZ = np.zeros(Z.shape)
-    H = np.zeros(Z.shape)
+    H = np.zeros(R.shape)
     
-    # iterate over the DEM
-    st = 10000
-    pbar = progressbar.ProgressBar(st).start()
+    pbar = progressbar.ProgressBar(nr).start()
     j = 0
-    for (y0,x0), value in np.ndenumerate(Z):
+    
+    # loop through the columns
+    for i in xrange(nr):
         
-        # create the endpoint
-        x1, y1 = x0 + searlen*np.sin(azm), y0 + searlen*np.cos(azm)
+        # get a column
+        zr = R[:,i]
         
-        # create the line as indicies to the dem
-#         xi, yi = np.linspace(x0, x1, searlen), np.linspace(y0, y1, searlen) 
-        xi, yi = _linspace(x0, x1, searlen), _linspace(y0, y1, searlen)
-        xi = xi.astype(np.int)  # indicies to the data
-        yi = yi.astype(np.int)
+        # find the DEM data
+        ind = zr > cval
         
-        # Extract the values along the line
-        ind = (xi < n) & (yi < m) # ensure that the values are on the grid
-        xi = xi[ind]
-        yi = yi[ind]
-        xl = X[xi]
-        yl = Y[yi]
+        # create new vectors
+        x = xr[ind]
+        z = zr[ind]
         
-        # distances between points
-        di = np.hypot(xl[1:]-xl[:-1],yl[1:]-yl[:-1])    
-        di = np.cumsum(di)
-        di = np.insert(di,0,0)   # add zero to the front for the current point
-        
-        # remove any duplicated values
-        di, ind = np.unique(di, return_index=True)
-        xi = xi[ind]
-        yi = yi[ind]
-        
-        zi = Z[yi, xi]
-        
-        # calculate the horizon
-        CZ[y0,x0], H[y0,x0] = horizon(0,di,zi)
-        
+        # if there are some values in the vector
+        # calculate the horizons
+        if len(z) > 0:
+            h = hor1f_simple(x, z)
+            
+#             if mask == 0:
+#                 cz = _cosz(x, z, x[h], z[h])
+#                 H[ind,i] = cz
+#             else:
+#                 h
         j += 1
         pbar.update(j)
-        if j == st:
-            break
- 
- 
-    pbar.finish()
     
-    return CZ, H
+    pbar.finsh()
+    Hz = np.empty(m,n)        
+    ndimage.interpolation.rotate(H, -azm, output=Hz, mode='nearest')  
+        
+    
+        
+    return H   
+        
+        
+def rotate_coords(x, y, theta, ox, oy):
+    """
+    Rotate arrays of coordinates x and y by theta radians about the
+    point (ox, oy).
+
+    """
+    s, c = np.sin(theta), np.cos(theta)
+    x, y = np.asarray(x) - ox, np.asarray(y) - oy
+    return x * c - y * s + ox, x * s + y * c + oy
+
+
+def rotate_image(src, theta, ox, oy, fill=255):
+    """
+    Rotate the image src by theta radians about (ox, oy).
+    Pixels in the result that don't correspond to pixels in src are
+    replaced by the value fill.
+
+    """
+    # Images have origin at the top left, so negate the angle.
+    theta = -theta
+
+    # Dimensions of source image. Note that scipy.misc.imread loads
+    # images in row-major order, so src.shape gives (height, width).
+    sh, sw = src.shape
+
+    # Rotated positions of the corners of the source image.
+    cx, cy = rotate_coords([0, sw, sw, 0], [0, 0, sh, sh], theta, ox, oy)
+
+    # Determine dimensions of destination image.
+    dw, dh = (int(np.ceil(c.max() - c.min())) for c in (cx, cy))
+
+    # Coordinates of pixels in destination image.
+    dx, dy = np.meshgrid(np.arange(dw), np.arange(dh))
+
+    # Corresponding coordinates in source image. Since we are
+    # transforming dest-to-src here, the rotation is negated.
+    sx, sy = rotate_coords(dx + cx.min(), dy + cy.min(), -theta, ox, oy)
+
+    # Select nearest neighbour.
+    sx, sy = sx.round().astype(int), sy.round().astype(int)
+
+    # Mask for valid coordinates.
+    mask = (0 <= sx) & (sx < sw) & (0 <= sy) & (sy < sh)
+
+    # Create destination image.
+    dest = np.empty(shape=(dh, dw), dtype=src.dtype)
+
+    # Copy valid coordinates from source image.
+    dest[dy[mask], dx[mask]] = src[sy[mask], sx[mask]]
+
+    # Fill invalid coordinates.
+    dest[dy[~mask], dx[~mask]] = fill
+    
+    #------------------------------------------------------------------------------ 
+    # prep some of the indicies for output in order to turn
+    # dest back to src image
+
+#     d = np.ravel_multi_index([dy,dx], dest.shape)
+#     s = np.ravel_multi_index([sy,sx], dest.shape, mode='clip')
+    s = np.array([sx, sy])
+    d = np.array([dx, dy])
+
+    return dest, d, s, mask
+
+def unrotate_image(dest, dind, sind, mask, shp):
+    '''
+    Unrotate an image created by rotate_image
+    '''
+     
+    # unpack the indicies
+    sx, sy = sind[0], sind[1]
+    dx, dy = dind[0], dind[1]
+     
+    # create the new src image and fill with NaN
+    s = np.empty(shp)
+    s.fill(np.NAN)
+    
+    # fill the src with the rotated image
+    s[sy[mask], sx[mask]] = dest[dy[mask], dx[mask]]
+     
+    # fill in any nan
+    if np.isnan(s).any():
+        vals = ~np.isnan(s)
+        r = np.arange(shp[0])
+        c = np.arange(shp[1])
+        cc,rr = np.meshgrid(c, r)
+          
+#         f = interpolate.Rbf(r[vals], c[vals], s[vals], function='linear')
+#         s = f(r[~vals], c[~vals])
+        
+        f = interpolate.interp2d(c, r, s[vals])
+        t = f(cc[~vals], rr[~vals])
+     
+    return s
     
     
 
@@ -258,7 +350,7 @@ def hor1f_simple(x,z):
 #     offset = 1      # offset from current point to start looking
     
     # preallocate the h array
-    h = np.zeros((N,1), dtype=int)
+    h = np.zeros(N, dtype=int)
     h[N-1] = N-1
     i = N - 2
     
@@ -365,15 +457,17 @@ def _cosz(x1,z1,x2,z2):
     20150601 Scott Havens
     '''
     d = np.sqrt((x2 - x1)**2 + (z2 - z1)**2)
+    diff = z2 - z1
     
-    if d == 0:
-        v = 0
-    else:
-        v = (z2 - z1)/float(d)
+#     v = np.where(diff != 0., d/diff, 100)
+    
+    i = diff == 0
+    diff[i] = 1
+    v = d/diff
+    v[i] = 0
     
     return v
-    
-    
+        
 
 def sunang(date, lat, lon, zone=0, slope=0, aspect=0):
     '''
