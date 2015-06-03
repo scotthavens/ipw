@@ -11,6 +11,7 @@ import numpy as np
 import datetime as dt
 import subprocess as sp
 import math
+import progressbar
 # from isnobal import ipw
 
 IPW = "/Users/ipw/ipw-2.1.0/bin"# IPW executables
@@ -111,6 +112,8 @@ def ihorizon(X, Y, Z, azm, searlen=100):
     Calculate the horizon values for an entire DEM image
     for the desired azimuth
     
+    Assumes that the step size is constant
+    
     Inputs:
         X - vector of x-coordinates
         Y - vector of y-coordinates
@@ -128,19 +131,25 @@ def ihorizon(X, Y, Z, azm, searlen=100):
     # check inputs
     azm = azm*np.pi/180 # degress to radians
     m,n = Z.shape
+    dx = X[2] - X[1]    # DEM step size
+    
     
     # preallocate
     CZ = np.zeros(Z.shape)
     H = np.zeros(Z.shape)
     
     # iterate over the DEM
+    st = 10000
+    pbar = progressbar.ProgressBar(st).start()
+    j = 0
     for (y0,x0), value in np.ndenumerate(Z):
         
         # create the endpoint
         x1, y1 = x0 + searlen*np.sin(azm), y0 + searlen*np.cos(azm)
         
         # create the line as indicies to the dem
-        xi, yi = np.linspace(x0, x1, searlen), np.linspace(y0, y1, searlen) 
+#         xi, yi = np.linspace(x0, x1, searlen), np.linspace(y0, y1, searlen) 
+        xi, yi = _linspace(x0, x1, searlen), _linspace(y0, y1, searlen)
         xi = xi.astype(np.int)  # indicies to the data
         yi = yi.astype(np.int)
         
@@ -166,6 +175,13 @@ def ihorizon(X, Y, Z, azm, searlen=100):
         # calculate the horizon
         CZ[y0,x0], H[y0,x0] = horizon(0,di,zi)
         
+        j += 1
+        pbar.update(j)
+        if j == st:
+            break
+ 
+ 
+    pbar.finish()
     
     return CZ, H
     
@@ -217,7 +233,130 @@ def horizon(i,x,z):
     
     
     return cz, h
+
+def hor1f_simple(x,z):
+    '''
+    Calculate the horizon pixel for all x,z
+    This mimics the simple algorthim from Dozier 1981
+    to help understand how it's working
     
+    Works backwards from the end but looks forwards for
+    the horizon
+    90% faster than rad.horizon
+    
+    Inputs:
+    x - horizontal distances for points
+    z - elevations for the points
+    
+    Output:
+    h - index to the horizon point
+    
+    20150601 Scott Havens
+    '''
+    
+    N = len(x)  # number of points to look at
+#     offset = 1      # offset from current point to start looking
+    
+    # preallocate the h array
+    h = np.zeros((N,1), dtype=int)
+    h[N-1] = N-1
+    i = N - 2
+    
+    # work backwarks from the end for the pixels
+    while i >= 0:
+        h[i] = i
+        j = i + 1   # looking forward
+        max_tan = 0
+        
+        while j < N:
+            sij = _slope(i,z[i],j,z[j])
+            
+            if sij > max_tan:
+                h[i] = j
+                max_tan = sij
+            
+            j = j + 1
+        i = i - 1
+    
+    return h
+
+def hor1f(x, z, offset=2):
+    '''
+    BROKEN: Haven't quite figured this one out
+    
+    Calculate the horizon pixel for all x,z
+    This mimics the algorthim from Dozier 1981 and the 
+    hor1f.c from IPW
+    
+    Works backwards from the end but looks forwards for
+    the horizon
+    
+    xrange stops one index before [stop]
+    
+    Inputs:
+    x - horizontal distances for points
+    z - elevations for the points
+    
+    Output:
+    h - index to the horizon point
+    
+    20150601 Scott Havens
+    '''
+    
+    N = len(x)  # number of points to look at
+    
+    # preallocate the h array
+    h = np.zeros((N,1), dtype=int)
+    h[N-1] = N-1    # the end point is it's own horizon
+        
+    # work backwarks from the end for the pixels
+    for i in xrange(N-2,-1,-1) :
+        
+        zi = z[i]
+        
+        # Start with next-to-adjacent point in either forward or backward
+        # direction, depending on which way loop is running. Note that we
+        # don't consider the adjacent point; this seems to help reduce noise.
+        k = i + offset
+        if k >= N: k -= 1
+          
+        # loop until horizon is found
+        # xrange will set the maximum number of iterations that can be
+        # performed based on the length of the vector
+        for t in xrange(k,N):
+            j = k
+            k = h[j][0]
+            sij = _slope(i, zi, j, z[j])
+            sihj = _slope(i, zi, k, z[k])
+            
+            # if slope(i,j) >= slope(i,h[j]), horizon has been found; otherwise
+            # set j to k (=h[j]) and loop again
+            # or if we are at the end of the section
+            if sij < sihj: # or k == N-1:
+                break
+            
+        
+        # if slope(i,j) > slope(j,h[j]), j is i's horizon; else if slope(i,j)
+        # is zero, i is its own horizon; otherwise slope(i,j) = slope(i,h[j])
+        # so h[j] is i's horizon
+        if sij > sihj:
+            h[i] = j
+        elif sij == 0:
+            h[i] = i
+        else:
+            h[i] = k
+        
+    
+    return h
+ 
+def _slope(xi,zi,xj,zj):
+    '''
+    Slope between the two points only if greater than 0
+    20150603 Scott Havens
+    '''
+    
+    return 0 if zj <= zi else (zj - zi) / (float(xj) - xi)   
+
     
 def _cosz(x1,z1,x2,z2):
     '''
@@ -296,6 +435,20 @@ def deg_to_dms(deg):
     m = int(md)
     sd = (md - m) * 60
     return [d, m, sd]
+
+def _linspace(start, stop, num):
+    '''
+    My own implementation of linspace for this work
+    20150602 Scott Havens
+    ''' 
+    
+    d = stop - start
+    i = np.arange(num)
+    
+    return start + i*d/(num - 1)
+    
+    
+
 
 
 

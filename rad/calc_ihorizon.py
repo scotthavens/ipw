@@ -34,13 +34,13 @@ X = d.bsamp + np.arange(d.nsamps)*d.dsamp
 
 # run the horizon
 startTime = datetime.now()
-# cz = rad.ihorizon(X, Y, d.data, azm)
+cz = rad.ihorizon(X, Y, d.data, azm)
 
 print datetime.now() - startTime
 
 # run the C code
 startTime = datetime.now()
-cmd = 'horizon -a %s %s > junk' % (str(azm), dem) 
+cmd = 'horizon -u %s -a %s %s > junk' % (str(mu), str(azm), dem) 
 sp.Popen(cmd, shell=True, env={"PATH": PATH, "IPW": IPW, "TMPDIR": TMPDIR}).wait()
 # horizon -u $mu -a $azm $efile > $hfile
 
