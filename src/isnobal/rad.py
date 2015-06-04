@@ -11,7 +11,6 @@ import numpy as np
 import datetime as dt
 import subprocess as sp
 import math
-from scipy import ndimage, interpolate
 import progressbar
 # from isnobal import ipw
 
@@ -108,7 +107,7 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     return alb_v, alb_ir
 
-def ihorizon(x, y, Z, azm, mask=0):
+def ihorizon(x, y, Z, azm, mu=0, offset=2):
     '''
     Calculate the horizon values for an entire DEM image
     for the desired azimuth
@@ -120,8 +119,8 @@ def ihorizon(x, y, Z, azm, mask=0):
         Y - vector of y-coordinates
         Z - matrix of elevation data
         azm - azimuth to calculate the horizon at
-        mask - 0 -> calculate cos(z)
-             - 1 -> calculate a mask whether or not the point can see the sun
+        mu - 0 -> calculate cos(z)
+             - >0 -> calculate a mask whether or not the point can see the sun
     
     Outputs:
         H   - if mask=0 cosine of the local horizonal angles
@@ -146,8 +145,8 @@ def ihorizon(x, y, Z, azm, mask=0):
     yr = (x[2] - x[1]) * yr
     
     H = np.zeros(Z.shape)
-    pbar = progressbar.ProgressBar(n).start()
-    j = 0
+#     pbar = progressbar.ProgressBar(n).start()
+#     j = 0
     
     # loop through the columns
     for i in xrange(-n/2,n/2):
@@ -167,68 +166,28 @@ def ihorizon(x, y, Z, azm, mask=0):
         # if there are some values in the vector
         # calculate the horizons
         if len(zi) > 0:
-#             h = hor1f_simple(di, zi)
-            h = hor1f(di, zi)
+#             h2 = hor1f_simple(di, zi)
+            h = hor1f(di, zi, offset)
             
-            if mask == 0:
-                cz = _cosz(di, zi, di[h], zi[h])
-                H[ind] = cz
-            else:
-                h
+            cz = _cosz(di, zi, di[h], zi[h])
+            
+            # if we are making a mask
+            if mu > 0:
+#                 iz = cz == 0    # points that are their own horizon
+                idx = cz > mu   # points sheltered from the sun
+                cz[idx] = 0
+                cz[~idx] = 1
+#                 cz[iz] = 1
+                
+            H[ind] = cz
 
-#         H[ind] = h
-
-        j += 1
-        pbar.update(j)
-    
-    pbar.finsh()
+#         j += 1
+#         pbar.update(j)
+#     
+#     pbar.finish()
         
     return H   
         
-        
-
-def horizon(i,x,z):
-    '''
-    Calculate the horizon point for pixel i on the x,y points
-    Written to mimic IPW's horizon function
-    
-    Inputs:
-    i - pixel index on the (x,y) point
-    x - horizontal distances for points
-    z - elevations for the points
-    
-    Output:
-    cz - cosine of the anlge from the zenith to the pixel's horizon
-        in the forward sampling direction
-    h - index to the value
-    
-    20150601 Scott Havens
-    '''
-    
-    n = len(x)-1  # number of points to look at
-    offset = 1      # offset from current point to start looking
-    
-    if i == n:
-        h = i
-    else:
-        # origin point
-        xo = x[i]
-        zo = z[i]
-        
-        # array of other point, ignore the neighbor point
-        xi = np.array(x[i+offset:])
-        zi = np.array(z[i+offset:])
-        
-        # calculate the slope to each point
-        s = (zi - zo)/(xi - float(xo))
-        
-        # find the maximum value
-        if np.sum(s>0) == 0:
-            h = i
-        else:
-            h = np.argmax(s) + i + offset
-    
-    return h
 
 def hor1f_simple(x,z):
     '''
@@ -306,21 +265,7 @@ def hor1f(x, z, offset=2):
     # preallocate the h array
     h = np.zeros(N, dtype=int)
     h[N-1] = N-1    # the end point is it's own horizon
-        
-    # create a lookup table of slopes
-#     ST = np.zeros([N,N])
-#     idx = np.arange(N)
-#     for i in xrange(0,N-1):
-#         
-#         # determine where there are other points higher in elevation
-#         # past the current point
-#         ind = (z >= z[i]) & (idx > i)
-#         
-#         # calculate the slope from the point to every other point
-#         v = _slope_vect(x[i], z[i], x[ind], z[ind])   
-#         
-#         ST[ind,i] = v
-    
+            
     # work backwarks from the end for the pixels
     for i in xrange(N-2,-1,-1) :
         
@@ -338,30 +283,16 @@ def hor1f(x, z, offset=2):
         for t in xrange(k,N):
             j = k
             k = h[j]
-            
-            # get the slope from the table
-#             sij = ST[j,i]
-#             sihj = ST[k,i]
-            
+                        
             sij = _slope(x[i], zi, x[j], z[j])
             sihj = _slope(x[i], zi, x[k], z[k])
-            
-#             vij = np.array([j-i, z[j]-zi])
-#             vihj = np.array([k-i, z[k]-zi])
-#             costh = _py_ang(vij, vihj)
-            
+                        
             # if slope(i,j) >= slope(i,h[j]), horizon has been found; otherwise
             # set j to k (=h[j]) and loop again
             # or if we are at the end of the section
-            if sij >= sihj: # or k == N-1:
+            if sij > sihj: # or k == N-1:
                 break
-        
-            # if cos(angle) is negative, then the horizon has been found,
-            # otherwise cos(angle) is positive then keep looking
-            # the angles will most likely always hover around -1/1 
-#             if costh <= 0:
-#                 break
-        
+                
         # if slope(i,j) > slope(j,h[j]), j is i's horizon; else if slope(i,j)
         # is zero, i is its own horizon; otherwise slope(i,j) = slope(i,h[j])
         # so h[j] is i's horizon
@@ -371,30 +302,11 @@ def hor1f(x, z, offset=2):
             h[i] = i
         else:
             h[i] = k
-            
-#         if z[k] < zi:   # when z[i] is the high point
-#             h[i] = i
-#         elif costh < 0: # when h[j] is then new horizon
-#             h[i] = j
-#         else:
-#             h[i] = k
-                
+                           
     
     return h
+
  
-def _py_ang(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'    """
-    
-    c = 1
-    if v2[1] < v1[1]:
-        c = -1
-        
-    return c*np.dot(v1, v2)/np.hypot(v1[0], v1[1])/np.hypot(v2[0], v2[1])
-    
-#     sinang = np.linalg.norm(np.cross(v1, v2))
-#     return cosang
-
-
 def _slope(xi,zi,xj,zj):
     '''
     Slope between the two points only if the pixel is higher
@@ -403,16 +315,7 @@ def _slope(xi,zi,xj,zj):
     '''
     
     return 0 if zj <= zi else (zj - zi) / (xj - float(xi))
-
-def _slope_vect(xi,zi,xj,zj):
-    '''
-    Slope between the two points only if the pixel is higher
-    than the other
-    20150603 Scott Havens
-    '''
     
-    return (zj - zi) / (xj - float(xi))  
-
     
 def _cosz(x1,z1,x2,z2):
     '''
@@ -425,9 +328,9 @@ def _cosz(x1,z1,x2,z2):
     
 #     v = np.where(diff != 0., d/diff, 100)
     
-    i = diff == 0
-    diff[i] = 1
-    v = d/diff
+    i = d == 0
+    d[i] = 1
+    v = diff/d
     v[i] = 0
     
     return v
