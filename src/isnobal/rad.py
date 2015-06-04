@@ -108,7 +108,7 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     return alb_v, alb_ir
 
-def ihorizon(X, Y, Z, azm, mask=0):
+def ihorizon(x, y, Z, azm, mask=0):
     '''
     Calculate the horizon values for an entire DEM image
     for the desired azimuth
@@ -131,153 +131,61 @@ def ihorizon(X, Y, Z, azm, mask=0):
     '''
     
     # check inputs
-#     azm = azm*np.pi/180 # degress to radians
+    azm = azm*np.pi/180 # degress to radians
     m,n = Z.shape
-    dx = X[2] - X[1]    # DEM step size
-    cval = -99
+     
+    # transform the x,y into the azm direction xr,yr
+    xi, yi = np.arange(-n/2,n/2), np.arange(-m/2,m/2)
+    X, Y = np.meshgrid(xi, yi)
+    xr = X*np.cos(azm) - Y*np.sin(azm)
+    yr = X*np.sin(azm) + Y*np.cos(azm)
     
-    # Rotate the DEM by the azimuth, values outsite of the
-    # old image will be set to cval
-    R = ndimage.interpolation.rotate(Z, azm, cval=cval)
-    mr,nr = R.shape
-    xr = dx*np.arange(mr)    # "coordinates" of the new rotated image
+    # xr is the "new" column index for the profiles
+    # yr is the distance along the profile
+    xr = xr.round().astype(int)
+    yr = (x[2] - x[1]) * yr
     
-    H = np.zeros(R.shape)
-    
-    pbar = progressbar.ProgressBar(nr).start()
+    H = np.zeros(Z.shape)
+    pbar = progressbar.ProgressBar(n).start()
     j = 0
     
     # loop through the columns
-    for i in xrange(nr):
+    for i in xrange(-n/2,n/2):
         
-        # get a column
-        zr = R[:,i]
+        # index to profile and get the elevations
+        ind = xr == i
+        zi = Z[ind]
         
-        # find the DEM data
-        ind = zr > cval
+        # distance along the profile
+        di = yr[ind]
         
-        # create new vectors
-        x = xr[ind]
-        z = zr[ind]
+        # sort the y values and get the cooresponding elevation
+        idx = np.argsort(di)
+        di = di[idx]
+        zi = zi[idx]
         
         # if there are some values in the vector
         # calculate the horizons
-        if len(z) > 0:
-            h = hor1f_simple(x, z)
+        if len(zi) > 0:
+#             h = hor1f_simple(di, zi)
+            h = hor1f(di, zi)
             
-#             if mask == 0:
-#                 cz = _cosz(x, z, x[h], z[h])
-#                 H[ind,i] = cz
-#             else:
-#                 h
+            if mask == 0:
+                cz = _cosz(di, zi, di[h], zi[h])
+                H[ind] = cz
+            else:
+                h
+
+#         H[ind] = h
+
         j += 1
         pbar.update(j)
     
     pbar.finsh()
-    Hz = np.empty(m,n)        
-    ndimage.interpolation.rotate(H, -azm, output=Hz, mode='nearest')  
-        
-    
         
     return H   
         
         
-def rotate_coords(x, y, theta, ox, oy):
-    """
-    Rotate arrays of coordinates x and y by theta radians about the
-    point (ox, oy).
-
-    """
-    s, c = np.sin(theta), np.cos(theta)
-    x, y = np.asarray(x) - ox, np.asarray(y) - oy
-    return x * c - y * s + ox, x * s + y * c + oy
-
-
-def rotate_image(src, theta, ox, oy, fill=255):
-    """
-    Rotate the image src by theta radians about (ox, oy).
-    Pixels in the result that don't correspond to pixels in src are
-    replaced by the value fill.
-
-    """
-    # Images have origin at the top left, so negate the angle.
-    theta = -theta
-
-    # Dimensions of source image. Note that scipy.misc.imread loads
-    # images in row-major order, so src.shape gives (height, width).
-    sh, sw = src.shape
-
-    # Rotated positions of the corners of the source image.
-    cx, cy = rotate_coords([0, sw, sw, 0], [0, 0, sh, sh], theta, ox, oy)
-
-    # Determine dimensions of destination image.
-    dw, dh = (int(np.ceil(c.max() - c.min())) for c in (cx, cy))
-
-    # Coordinates of pixels in destination image.
-    dx, dy = np.meshgrid(np.arange(dw), np.arange(dh))
-
-    # Corresponding coordinates in source image. Since we are
-    # transforming dest-to-src here, the rotation is negated.
-    sx, sy = rotate_coords(dx + cx.min(), dy + cy.min(), -theta, ox, oy)
-
-    # Select nearest neighbour.
-    sx, sy = sx.round().astype(int), sy.round().astype(int)
-
-    # Mask for valid coordinates.
-    mask = (0 <= sx) & (sx < sw) & (0 <= sy) & (sy < sh)
-
-    # Create destination image.
-    dest = np.empty(shape=(dh, dw), dtype=src.dtype)
-
-    # Copy valid coordinates from source image.
-    dest[dy[mask], dx[mask]] = src[sy[mask], sx[mask]]
-
-    # Fill invalid coordinates.
-    dest[dy[~mask], dx[~mask]] = fill
-    
-    #------------------------------------------------------------------------------ 
-    # prep some of the indicies for output in order to turn
-    # dest back to src image
-
-#     d = np.ravel_multi_index([dy,dx], dest.shape)
-#     s = np.ravel_multi_index([sy,sx], dest.shape, mode='clip')
-    s = np.array([sx, sy])
-    d = np.array([dx, dy])
-
-    return dest, d, s, mask
-
-def unrotate_image(dest, dind, sind, mask, shp):
-    '''
-    Unrotate an image created by rotate_image
-    '''
-     
-    # unpack the indicies
-    sx, sy = sind[0], sind[1]
-    dx, dy = dind[0], dind[1]
-     
-    # create the new src image and fill with NaN
-    s = np.empty(shp)
-    s.fill(np.NAN)
-    
-    # fill the src with the rotated image
-    s[sy[mask], sx[mask]] = dest[dy[mask], dx[mask]]
-     
-    # fill in any nan
-    if np.isnan(s).any():
-        vals = ~np.isnan(s)
-        r = np.arange(shp[0])
-        c = np.arange(shp[1])
-        cc,rr = np.meshgrid(c, r)
-          
-#         f = interpolate.Rbf(r[vals], c[vals], s[vals], function='linear')
-#         s = f(r[~vals], c[~vals])
-        
-        f = interpolate.interp2d(c, r, s[vals])
-        t = f(cc[~vals], rr[~vals])
-     
-    return s
-    
-    
 
 def horizon(i,x,z):
     '''
@@ -320,11 +228,7 @@ def horizon(i,x,z):
         else:
             h = np.argmax(s) + i + offset
     
-    # calculate the cosz
-    cz = _cosz(x[i],z[i],x[h],z[h])
-    
-    
-    return cz, h
+    return h
 
 def hor1f_simple(x,z):
     '''
@@ -396,11 +300,27 @@ def hor1f(x, z, offset=2):
     '''
     
     N = len(x)  # number of points to look at
+    x = np.array(x)
+    z = np.array(z)
     
     # preallocate the h array
-    h = np.zeros((N,1), dtype=int)
+    h = np.zeros(N, dtype=int)
     h[N-1] = N-1    # the end point is it's own horizon
         
+    # create a lookup table of slopes
+#     ST = np.zeros([N,N])
+#     idx = np.arange(N)
+#     for i in xrange(0,N-1):
+#         
+#         # determine where there are other points higher in elevation
+#         # past the current point
+#         ind = (z >= z[i]) & (idx > i)
+#         
+#         # calculate the slope from the point to every other point
+#         v = _slope_vect(x[i], z[i], x[ind], z[ind])   
+#         
+#         ST[ind,i] = v
+    
     # work backwarks from the end for the pixels
     for i in xrange(N-2,-1,-1) :
         
@@ -417,16 +337,30 @@ def hor1f(x, z, offset=2):
         # performed based on the length of the vector
         for t in xrange(k,N):
             j = k
-            k = h[j][0]
-            sij = _slope(i, zi, j, z[j])
-            sihj = _slope(i, zi, k, z[k])
+            k = h[j]
+            
+            # get the slope from the table
+#             sij = ST[j,i]
+#             sihj = ST[k,i]
+            
+            sij = _slope(x[i], zi, x[j], z[j])
+            sihj = _slope(x[i], zi, x[k], z[k])
+            
+#             vij = np.array([j-i, z[j]-zi])
+#             vihj = np.array([k-i, z[k]-zi])
+#             costh = _py_ang(vij, vihj)
             
             # if slope(i,j) >= slope(i,h[j]), horizon has been found; otherwise
             # set j to k (=h[j]) and loop again
             # or if we are at the end of the section
-            if sij < sihj: # or k == N-1:
+            if sij >= sihj: # or k == N-1:
                 break
-            
+        
+            # if cos(angle) is negative, then the horizon has been found,
+            # otherwise cos(angle) is positive then keep looking
+            # the angles will most likely always hover around -1/1 
+#             if costh <= 0:
+#                 break
         
         # if slope(i,j) > slope(j,h[j]), j is i's horizon; else if slope(i,j)
         # is zero, i is its own horizon; otherwise slope(i,j) = slope(i,h[j])
@@ -437,17 +371,47 @@ def hor1f(x, z, offset=2):
             h[i] = i
         else:
             h[i] = k
-        
+            
+#         if z[k] < zi:   # when z[i] is the high point
+#             h[i] = i
+#         elif costh < 0: # when h[j] is then new horizon
+#             h[i] = j
+#         else:
+#             h[i] = k
+                
     
     return h
  
+def _py_ang(v1, v2):
+    """ Returns the angle in radians between vectors 'v1' and 'v2'    """
+    
+    c = 1
+    if v2[1] < v1[1]:
+        c = -1
+        
+    return c*np.dot(v1, v2)/np.hypot(v1[0], v1[1])/np.hypot(v2[0], v2[1])
+    
+#     sinang = np.linalg.norm(np.cross(v1, v2))
+#     return cosang
+
+
 def _slope(xi,zi,xj,zj):
     '''
-    Slope between the two points only if greater than 0
+    Slope between the two points only if the pixel is higher
+    than the other
     20150603 Scott Havens
     '''
     
-    return 0 if zj <= zi else (zj - zi) / (float(xj) - xi)   
+    return 0 if zj <= zi else (zj - zi) / (xj - float(xi))
+
+def _slope_vect(xi,zi,xj,zj):
+    '''
+    Slope between the two points only if the pixel is higher
+    than the other
+    20150603 Scott Havens
+    '''
+    
+    return (zj - zi) / (xj - float(xi))  
 
     
 def _cosz(x1,z1,x2,z2):
@@ -530,16 +494,7 @@ def deg_to_dms(deg):
     sd = (md - m) * 60
     return [d, m, sd]
 
-def _linspace(start, stop, num):
-    '''
-    My own implementation of linspace for this work
-    20150602 Scott Havens
-    ''' 
-    
-    d = stop - start
-    i = np.arange(num)
-    
-    return start + i*d/(num - 1)
+
     
     
 

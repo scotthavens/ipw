@@ -26,7 +26,7 @@ i = ipw.IPW(dem)
 mu = 0.670150
 azm = 10.373    # angle from south
 # azm = 45
-azm = azm*np.pi/180
+# azm = azm*np.pi/180
 
 
 # process the dem file
@@ -34,13 +34,14 @@ d = i.bands[0]
 Y = d.bline + np.arange(d.nlines)*d.dline
 X = d.bsamp + np.arange(d.nsamps)*d.dsamp
 Z = d.data
-Z,f = np.meshgrid(np.arange(5),np.arange(5))
+Z = Z[:,1:200]
+# Z,f = np.meshgrid(np.arange(5),np.arange(5))
 zm,zn = Z.shape    
  
 
-R, d, s, mask = rad.rotate_image(Z, azm, zn/2, zm/2, -99)
-Zs = rad.unrotate_image(R, d, s, mask, Z.shape)
-print(np.average(Z-Zs))
+# R, d, s, mask = rad.rotate_image(Z, azm, zn/2, zm/2, -99)
+# Zs = rad.unrotate_image(R, d, s, mask, Z.shape)
+# print(np.average(Z-Zs))
 
 # zm,zn = R.shape
 # h = rad.rotate_image(R, -azm, zn/2, zm/2, -99)
@@ -56,7 +57,7 @@ print(np.average(Z-Zs))
 
 # run the horizon
 # startTime = datetime.now()
-# cz = rad.ihorizon(X, Y, Z, azm)
+cz = rad.ihorizon(X, Y, Z, azm)
 # print datetime.now() - startTime
 
 # run the C code

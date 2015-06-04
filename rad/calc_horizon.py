@@ -67,14 +67,16 @@ azm = 45
 # follow Dozier 1981 data for testing
 
 x = [0, 100, 150, 200, 225, 375, 400, 450, 500, 680, 780, 850, 875, 900, 960, 1010]
-y = [80, 180, 130, 50, 170, 90, 200, 95, 50, 60, 130, 160, 60, 80, 50, 75]
+y = [80, 180, 130, 50, 170, 90, 200, 95, 50, 60, 140, 160, 60, 80, 50, 75]
  
 startTime = datetime.now()
-h = np.empty([len(x), 1])
-cz = np.empty([len(x), 1])
+h = np.empty(len(x),)
+cz = np.empty(len(x),)
 for j in xrange(1,1000):
     for i in range(0,len(x)):
-        cz[i], h[i] = rad.horizon(i, x, y)
+        h[i] = rad.horizon(i, x, y)
+# calculate the cosz
+# cz = rad._cosz(x,y,x[h],y[h])
 print datetime.now() - startTime
 
 # hor1f_simple is 90% faster than horizon
@@ -82,6 +84,14 @@ startTime = datetime.now()
 for j in xrange(1,1000):
     hi = rad.hor1f_simple(x, y)
 print datetime.now() - startTime
+
+# hor1f is 70% faster than horizon for small arrays
+# It is much faster than hor1f_simple on larger arrays
+startTime = datetime.now()
+for j in xrange(1,1000):
+    hi = rad.hor1f(x, y, 1)
+print datetime.now() - startTime
+
 
 print(hi)
 plt.Figure
