@@ -34,7 +34,7 @@ d = i.bands[0]
 Y = d.bline + np.arange(d.nlines)*d.dline
 X = d.bsamp + np.arange(d.nsamps)*d.dsamp
 Z = d.data
-Z = Z[:,1:200]
+Z = Z[:,1:50]
 # Z,f = np.meshgrid(np.arange(5),np.arange(5))
 zm,zn = Z.shape    
  

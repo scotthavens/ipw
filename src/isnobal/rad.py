@@ -8,10 +8,13 @@ __version__ = '0.0.1'
 
 
 import numpy as np
-import datetime as dt
+# import datetime as dt
 import subprocess as sp
 import math
-import progressbar
+# import progressbar
+# from joblib import Parallel, delayed  
+import multiprocessing as mp
+import ctypes
 # from isnobal import ipw
 
 IPW = "/Users/ipw/ipw-2.1.0/bin"# IPW executables
@@ -107,7 +110,7 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     return alb_v, alb_ir
 
-def ihorizon(x, y, Z, azm, mu=0, offset=2):
+def ihorizon(x, y, Z, azm, mu=0, offset=2, ncores=0):
     '''
     Calculate the horizon values for an entire DEM image
     for the desired azimuth
@@ -149,44 +152,70 @@ def ihorizon(x, y, Z, azm, mu=0, offset=2):
 #     j = 0
     
     # loop through the columns
+#     if ncores == 0:
     for i in xrange(-n/2,n/2):
-        
-        # index to profile and get the elevations
-        ind = xr == i
-        zi = Z[ind]
-        
-        # distance along the profile
-        di = yr[ind]
-        
-        # sort the y values and get the cooresponding elevation
-        idx = np.argsort(di)
-        di = di[idx]
-        zi = zi[idx]
-        
-        # if there are some values in the vector
-        # calculate the horizons
-        if len(zi) > 0:
-#             h2 = hor1f_simple(di, zi)
-            h = hor1f(di, zi, offset)
-            
-            cz = _cosz(di, zi, di[h], zi[h])
-            
-            # if we are making a mask
-            if mu > 0:
-#                 iz = cz == 0    # points that are their own horizon
-                idx = cz > mu   # points sheltered from the sun
-                cz[idx] = 0
-                cz[~idx] = 1
-#                 cz[iz] = 1
+        find_horizon(i, H, xr, yr, Z, mu)
+             
+#     else:
+#     shared_array_base = mp.Array(ctypes.c_double, m*n)
+#     sH = np.ctypeslib.as_array(shared_array_base.get_obj())
+#     sH = sH.reshape(m, n)
+#     sxr = np.ctypeslib.as_array(shared_array_base.get_obj())
+#     sxr = sxr.reshape(m, n)
+#     syr = np.ctypeslib.as_array(shared_array_base.get_obj())
+#     syr = syr.reshape(m, n)
+#     sZ = np.ctypeslib.as_array(shared_array_base.get_obj())
+#     sZ = sZ.reshape(m, n)
+#     def wrap_horizon(i, def_param1=sH, def_parm2=sxr, def_param3=syr, def_param4=sZ):
+#         find_horizon(i, sH, sxr, syr, sZ, 0.67)
+ 
+#     pool = mp.Pool(processes=4)
+#     [pool.apply(find_horizon, args=(i, shared_array, xr, yr, Z, mu, offset)) for i in range(-n/2,n/2)]
+#     pool.map(wrap_horizon, range(-n/2,n/2))
+    
+#     print(shared_array)
                 
-            H[ind] = cz
+    return H   
+
+
+
+def find_horizon(i, H, xr, yr, Z, mu):
+    # index to profile and get the elevations
+    ind = xr == i
+    zi = Z[ind]
+    
+    # distance along the profile
+    di = yr[ind]
+    
+    # sort the y values and get the cooresponding elevation
+    idx = np.argsort(di)
+    di = di[idx]
+    zi = zi[idx]
+    
+    # if there are some values in the vector
+    # calculate the horizons
+    if len(zi) > 0:
+#             h2 = hor1f_simple(di, zi)
+        h = hor1f(di, zi)
+        
+        cz = _cosz(di, zi, di[h], zi[h])
+        
+        # if we are making a mask
+        if mu > 0:
+#                 iz = cz == 0    # points that are their own horizon
+            idx = cz > mu   # points sheltered from the sun
+            cz[idx] = 0
+            cz[~idx] = 1
+#                 cz[iz] = 1
+            
+    H[ind] = cz
 
 #         j += 1
 #         pbar.update(j)
 #     
 #     pbar.finish()
         
-    return H   
+    
         
 
 def hor1f_simple(x,z):
@@ -235,7 +264,7 @@ def hor1f_simple(x,z):
     
     return h
 
-def hor1f(x, z, offset=2):
+def hor1f(x, z, offset=1):
     '''
     BROKEN: Haven't quite figured this one out
     
