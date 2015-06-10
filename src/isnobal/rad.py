@@ -427,10 +427,91 @@ def deg_to_dms(deg):
     return [d, m, sd]
 
 
+def cf_cloud(beam, diffuse, cf):
+    '''
+    Correct beam and diffuse irradiance for cloud attenuation at a single
+    time, using input clear-ky global and diffuse radiation calculations supplied by
+    locally modified toporad or locally modified stoporad
     
+    Inputs:
+    beam - global irradiance
+    diffuse - diffuse irradiance
+    cf- cloud attenuation factor
+    
+    Outputs:
+    c_grad - cloud corrected gobal irradiance
+    c_drad - cloud corrected diffuse irradiance
+    
+    20150610 Scott Havens - adapted from cloudcalc.c
+    '''
+    
+    # define some constants
+    CRAT1 = 0.15
+    CRAT2 = 0.99
+    CCOEF = 1.38
+    
+        
+    # cloud attenuation, beam ratio is reduced
+    bf_c = CCOEF * (cf - CRAT1)**2
+    c_grad = beam * cf
+    c_brad = c_grad * bf_c
+    c_drad = c_grad - c_brad
+    
+    # extensive cloud attenuation, no beam
+    ind = cf <= CRAT1
+    c_brad[ind] = 0
+    c_drad[ind] = c_grad[ind]
+    
+    # minimal cloud attenution, no beam ratio reduction
+    ind = cf > CRAT2
+    c_drad[ind] = diffuse[ind] * cf[ind]
+    c_brad[ind] = c_grad[ind] - c_drad[ind]
+    
+    return c_grad, c_drad
     
 
+def veg_beam(data, height, cosz, k):
+    '''
+    Apply the vegetation correction to the beam irradiance
+    using the equation from Links and Marks 1999
+    
+    S_b,f = S_b,o * exp[ -k h sec(theta) ] or
+    S_b,f = S_b,o * exp[ -k h / cosz ]
+    
+    20150610 Scott Havens
+    '''
+    
+    # ensure that the sun is visible
+    cosz[cosz <= 0] = 0.01
+    
+    return data * np.exp(-k * height / cosz)
 
+    
+def veg_diffuse(data, tau):
+    '''
+    Apply the vegetation correction to the diffuse irradiance
+    using the equation from Links and Marks 1999
+    
+    S_d,f = tau * S_d,o
+    
+    20150610 Scott Havens
+    '''
+    
+    return tau * data
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 

@@ -457,6 +457,10 @@ class IPW:
             float_max = \
                 (b.float_max, int(b.float_max))[b.float_max == int(b.float_max)]
                 
+#             if float_max == float_min:
+#                 float_max += 1
+#                 float_min -= 1
+                
             # determine if there are units
             if b.units is not None:
                 lines += ["!<header> lq {0} $Revision: 1.6 $".format(i),
