@@ -346,8 +346,15 @@ class IPW:
             self.bands[i].frmt = 'uint' + str(bytes*8)
             self.bands[i].int_min = 0
             self.bands[i].int_max = 2**nbits - 1
-            self.bands[i].float_max = np.amax(self.bands[i].data)
-            self.bands[i].float_min = np.amin(self.bands[i].data)
+            float_max = np.amax(self.bands[i].data)
+            float_min = np.amin(self.bands[i].data)
+            
+            # correct if the min and max are the same
+            if float_max == float_min:
+                float_max += 1
+            
+            self.bands[i].float_max = float_max
+            self.bands[i].float_min = float_min
             
         # prepare the headers        
         last_line = "!<header> image -1 $Revision: 1.5 $"

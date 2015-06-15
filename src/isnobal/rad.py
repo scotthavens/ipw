@@ -27,6 +27,9 @@ VFAC = 500.0        # visible decay factor
 VZRG = 1.375e-3     # vis zenith increase range factor
 IRZRG = 2.0e-3      # ir zenith increase range factor
 IRZ0 = 0.1          # ir zenith increase range, gsize=0
+STEF_BOLTZ = 5.6697e-8  # stephman boltzman constant
+EMISS_TERRAIN = 0.98    # emissivity of the terrain
+EMISS_VEG = 0.96    # emissivity of the vegitation
 
 def growth(t):
     '''
@@ -499,10 +502,73 @@ def veg_diffuse(data, tau):
     
     return tau * data
     
+
+def set_min_max(data, min_val, max_val):
+    '''
+    Ensure that the data is in the bounds of min and max
+    20150611 Scott Havens
+    '''
+    
+    data[data <= min_val] = min_val
+    data[data >= max_val] = max_val
+    
+    return data
     
     
+def thermal_correct_terrain(th, ta, viewf):
+    '''
+    Correct the thermal radiation for terrain assuming that
+    the terrain is at the air temperature and the pixel and 
+    a sky view
+    
+    Inputs:
+    th - thermal radiation
+    ta - air temperature [C]
+    viewf - sky view factor from view_f
+    
+    Outputs:
+    th_c - correct thermal radiation
+    
+    20150611 Scott Havens
+    '''
+    
+    # thermal emitted from the terrain
+    terrain = STEF_BOLTZ * EMISS_TERRAIN * np.power(ta + 273.15, 4)
+    
+    # correct the incoming thermal
+    return viewf * th + (1 - viewf) * terrain
     
     
+def thermal_correct_canopy(th, ta, tau, veg_height, height_thresh=2):
+    '''
+    Correct thermal radiation for vegitation.  It will only correct
+    for pixels where the veg height is above a threshold. This ensures
+    that the open areas don't get this applied.  Vegitation temp
+    is assumed to be at air temperature
+    
+    Inputs:
+    th - thermal radiation
+    ta - air temperature [C]
+    tau - transmissivity of the canopy
+    veg_height - vegitation height for each pixel
+    height_thresh - threshold hold for height to say that there is veg in the pixel
+    
+    Output:
+    th_c - corrected thermal radiation
+    
+    20150611 Scott Havens
+    '''
+    
+    # thermal emitted from the canopy
+    veg = STEF_BOLTZ * EMISS_VEG * np.power(ta + 273.15, 4)
+    
+    # pixels with canopy above the threshold
+    ind = veg_height > height_thresh
+    
+    # correct incoming thermal
+    th[ind] = tau[ind] * th[ind] + (1 - tau[ind]) * veg[ind]
+    
+    return th
     
     
     
