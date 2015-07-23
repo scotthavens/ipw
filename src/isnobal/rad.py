@@ -13,8 +13,8 @@ import subprocess as sp
 import math
 # import progressbar
 # from joblib import Parallel, delayed  
-import multiprocessing as mp
-import ctypes
+# import multiprocessing as mp
+# import ctypes
 # from isnobal import ipw
 
 IPW = "/Users/ipw/ipw-2.1.0/bin"# IPW executables
@@ -52,7 +52,7 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     Inputs:
     telapsed - time since last snow storm (decimal days)
-    cosz - from sunang
+    cosz - cosine local solar illumination angle matrix
     gsize - gsize is effective grain radius of snow after last storm (mu m)
     maxgsz -  maxgsz is maximum grain radius expected from grain growth (mu m)
     dirt - dirt is effective contamination for adjustment to visible albedo (usually between 1.5-3.0)
@@ -61,22 +61,22 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     
     
     Created April 17, 2015
+    Modified July 23, 2015 - take image of cosz and calculate albedo for one time step
     Scott Havens
     '''
     
-    telapsed = np.array(telapsed)
+#     telapsed = np.array(telapsed)
     
     # check inputs
-    if gsize <= 0 | gsize >= 500:
+    if gsize <= 0 or gsize > 500:
         raise Exception("unrealistic input: gsize=%i", gsize)
 
-    if (maxgsz <= gsize | maxgsz >= 2000):
+    if (maxgsz <= gsize or maxgsz > 2000):
         raise Exception("unrealistic input: maxgsz=%i", maxgsz)
-
-    if dirt >= 10:
+    if 1 >= dirt >= 10:
         raise Exception("unrealistic input: dirt=%i", dirt)
-    if dirt <= 1:
-        raise Exception("unrealistic input: dirt=%i", dirt)
+#     if dirt <= 1:
+#         raise Exception("unrealistic input: dirt=%i", dirt)
     
     # set initial grain radii for vis and ir
     radius_ir = math.sqrt(gsize);
@@ -84,32 +84,31 @@ def albedo(telapsed, cosz, gsize, maxgsz, dirt=2):
     radius_v = math.sqrt(dirt * gsize);
     range_v = math.sqrt(dirt * maxgsz) -radius_v;
     
-    #check to see if sun is up
-    if (cosz > 0.0):
-        # calc grain growth decay factor
-        growth_factor = growth(telapsed + 1.0);
+    # calc grain growth decay factor
+    growth_factor = growth(telapsed + 1.0);
 
-        # calc effective gsizes for vis & ir
-        gv = radius_v + (range_v * growth_factor);
-        gir = radius_ir + (range_ir * growth_factor);
+    # calc effective gsizes for vis & ir
+    gv = radius_v + (range_v * growth_factor);
+    gir = radius_ir + (range_ir * growth_factor);
 
-        #calc albedos for cos(z)=1
-        alb_v = MAXV - (gv / VFAC);
-        alb_ir = MAXIR * np.exp(IRFAC * gir);
+    #calc albedos for cos(z)=1
+    alb_v_1 = MAXV - (gv / VFAC);
+    alb_ir_1 = MAXIR * np.exp(IRFAC * gir);
 
-        # calculate effect of cos(z)<1
+    # calculate effect of cos(z)<1
 
-        # adjust diurnal increase range 
-        dzv = gv * VZRG;
-        dzir = (gir * IRZRG) + IRZ0;
+    # adjust diurnal increase range 
+    dzv = gv * VZRG;
+    dzir = (gir * IRZRG) + IRZ0;
 
-        # calculate albedo
-        alb_v += dzv * (1.0 - cosz);
-        alb_ir += dzir * (1.0 - cosz);
+    # calculate albedo
+    alb_v = alb_v_1;
+    alb_ir = alb_ir_1;
     
-    else:
-        alb_v = np.zeros(telapsed.shape);
-        alb_ir = np.zeros(telapsed.shape);
+    # correct if the sun is up  
+    ind = cosz > 0.0;   
+    alb_v[ind] += dzv[ind] * (1.0 - cosz[ind]);
+    alb_ir[ind] += dzir[ind] * (1.0 - cosz[ind]);
     
     return alb_v, alb_ir
 
