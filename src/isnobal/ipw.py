@@ -63,6 +63,8 @@ class Band:
         self.geounits = None
         self.coord_sys_ID = None
         self.geotransform = None
+        self.x = None
+        self.y = None
 
         # lq
         self.int_min = 0
@@ -88,6 +90,9 @@ class Band:
                              dsamp, 0.0,
                              bline - dline / 2.0,
                              0.0, dline]
+        self.y = bline + np.arange(self.nlines)*dline
+        self.x = bsamp + np.arange(self.nsamps)*dsamp
+        
         
     def _parse_geo(self, L0, L1, L2, L3, L4, L5):
         """
